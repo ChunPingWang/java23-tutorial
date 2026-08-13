@@ -13,7 +13,8 @@
 5. [常用 API](#5-常用-api)
 6. [Java 23 新特性總覽](#6-java-23-新特性總覽)
 7. [GC 的選擇與最佳化](#7-gc-的選擇與最佳化)
-8. [延伸閱讀](#8-延伸閱讀)
+8. [完整範例程式(已實測)](#8-完整範例程式已實測)
+9. [延伸閱讀](#9-延伸閱讀)
 
 ---
 
@@ -567,7 +568,70 @@ java -XX:StartFlightRecording=duration=120s,filename=rec.jfr -jar app.jar
 
 ---
 
-## 8. 延伸閱讀
+## 8. 完整範例程式(已實測)
+
+本教學的所有程式片段都有對應的**完整可執行範例**,放在 [`examples/`](examples/) 目錄,並已於 **OpenJDK Temurin 23.0.2**(Linux x64)實際編譯執行驗證通過:
+
+| 範例 | 對應章節 | 執行方式 |
+|------|---------|---------|
+| [`01-hello/Hello.java`](examples/01-hello/Hello.java) | 2. 第一個程式 | `java Hello.java` |
+| [`01-hello/HelloSimple.java`](examples/01-hello/HelloSimple.java) | 2. 隱式宣告類別(JEP 477) | `java --enable-preview HelloSimple.java` |
+| [`02-basics/Basics.java`](examples/02-basics/Basics.java) | 3. 語言基礎 | `java Basics.java` |
+| [`03-oop/OopDemo.java`](examples/03-oop/OopDemo.java) | 4. 物件導向、模式比對 | `java OopDemo.java` |
+| [`04-api/ApiDemo.java`](examples/04-api/ApiDemo.java) | 5. 集合 / Stream / Optional | `java ApiDemo.java` |
+| [`04-api/VirtualThreadsDemo.java`](examples/04-api/VirtualThreadsDemo.java) | 5.4 虛擬執行緒 | `java VirtualThreadsDemo.java` |
+| [`05-java23/MarkdownDocDemo.java`](examples/05-java23/MarkdownDocDemo.java) | 6.1 Markdown 文件註解(JEP 467) | `java MarkdownDocDemo.java` |
+| [`05-java23/PrimitivePatternsDemo.java`](examples/05-java23/PrimitivePatternsDemo.java) | 6.2 基本型別模式(JEP 455) | `java --enable-preview PrimitivePatternsDemo.java` |
+| [`05-java23/GatherersDemo.java`](examples/05-java23/GatherersDemo.java) | 6.3 Stream Gatherers(JEP 473) | `java --enable-preview GatherersDemo.java` |
+| [`05-java23/ModuleImportDemo.java`](examples/05-java23/ModuleImportDemo.java) | 6.4 模組匯入(JEP 476) | `java --enable-preview ModuleImportDemo.java` |
+| [`05-java23/FlexibleConstructorDemo.java`](examples/05-java23/FlexibleConstructorDemo.java) | 6.5 彈性建構子(JEP 482) | `java --enable-preview FlexibleConstructorDemo.java` |
+| [`06-gc/GcDemo.java`](examples/06-gc/GcDemo.java) | 7. GC 觀察與比較 | 見下方 |
+
+一鍵執行全部範例:
+
+```bash
+cd examples
+./run-all.sh          # 需要 Java 23;可用 JAVA=/path/to/java-23/bin/java ./run-all.sh 指定
+```
+
+### 部分實測結果摘錄
+
+**虛擬執行緒**(10,000 個各睡 1 秒的任務,併發執行約 1 秒完成):
+
+```text
+完成 10000 個任務(每個睡 1 秒),共花 1046 ms
+```
+
+**GC 比較**(`GcDemo.java` 分配 2000MB、保留 20MB,`-Xmx512m`):
+
+```text
+--- G1(預設)---
+使用中的 GC:G1 Young Generation, G1 Concurrent GC, G1 Old Generation
+共分配 2000 MB,保留 20 MB,耗時 249 ms,目前堆使用約 181 MB
+
+--- ZGC ---
+使用中的 GC:ZGC Minor Cycles, ZGC Minor Pauses, ZGC Major Cycles, ZGC Major Pauses
+共分配 2000 MB,保留 20 MB,耗時 446 ms,目前堆使用約 316 MB
+
+--- Parallel ---
+使用中的 GC:PS MarkSweep, PS Scavenge
+共分配 2000 MB,保留 20 MB,耗時 277 ms,目前堆使用約 42 MB
+
+--- Serial ---
+使用中的 GC:Copy, MarkSweepCompact
+共分配 2000 MB,保留 20 MB,耗時 230 ms,目前堆使用約 45 MB
+```
+
+幾個可以觀察到的重點,呼應第 7 章的取捨:
+
+- ZGC 的 MXBean 名稱是 **`ZGC Minor/Major Cycles`**,證實 Java 23 的 ZGC 預設就是**分代模式**(JEP 474)。
+- ZGC 耗時較長、常駐堆較大 —— 它用 CPU 與空間換取次毫秒停頓;這種純吞吐量型的批次負載反而是 Parallel/G1 較有利,與 7.5 節的注意事項一致。
+- 加上 `-Xlog:gc` 可看到實際的 GC 事件,例如 G1 的
+  `Pause Young (Normal) (G1 Evacuation Pause) 25M->6M(248M) 3.522ms`。
+
+---
+
+## 9. 延伸閱讀
 
 - [Java 23 官方發布說明](https://jdk.java.net/23/release-notes)
 - [OpenJDK JEP 索引](https://openjdk.org/jeps/0)
