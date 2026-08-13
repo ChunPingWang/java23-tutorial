@@ -251,6 +251,55 @@ static double area(Shape shape) {
 }
 ```
 
+### 4.6 類別關係圖(Class Diagram)
+
+本章範例([`OopDemo.java`](examples/03-oop/OopDemo.java))的類別關係如下:
+
+```mermaid
+classDiagram
+    class Shape {
+        <<sealed interface>>
+        +area() double
+        +describe() String
+    }
+
+    class Circle {
+        <<record>>
+        -double radius
+        +area() double
+    }
+
+    class Square {
+        <<record>>
+        -double side
+        +area() double
+    }
+
+    class Person {
+        -String name
+        -int age
+        +getName() String
+        +getAge() int
+        +toString() String
+    }
+
+    class PersonRecord {
+        <<record>>
+        +String name
+        +int age
+    }
+
+    Shape <|.. Circle : implements
+    Shape <|.. Square : implements
+
+    note for Shape "sealed:permits Circle, Square<br/>describe() 為 default 方法"
+    note for PersonRecord "Record 自動產生建構子、<br/>equals、hashCode、toString"
+```
+
+- `Shape` 是 **sealed 介面**,只允許 `Circle` 與 `Square` 實作,因此 `switch` 模式比對可以涵蓋所有情況而不需要 `default` 分支。
+- `Circle`、`Square`、`PersonRecord` 都是 **Record**,欄位不可變,存取器與 `equals`/`hashCode`/`toString` 由編譯器自動產生。
+- `Person` 是傳統類別寫法,與 `PersonRecord` 對照可看出 Record 省下的樣板程式碼。
+
 ---
 
 ## 5. 常用 API
@@ -314,6 +363,30 @@ try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
     }
 }  // executor 關閉時等待所有任務完成
 ```
+
+執行流程如下([`VirtualThreadsDemo.java`](examples/04-api/VirtualThreadsDemo.java) 實測約 1 秒完成 10,000 個任務):
+
+```mermaid
+sequenceDiagram
+    participant Main as main()
+    participant Exec as ExecutorService<br/>(newVirtualThreadPerTaskExecutor)
+    participant VT as 虛擬執行緒 ×10,000
+    participant OS as 載體執行緒<br/>(Carrier / OS Thread)
+
+    Main->>Exec: submit(task) ×10,000
+    Exec->>VT: 每個任務建立一條虛擬執行緒
+    activate VT
+    VT->>OS: 掛載(mount)開始執行
+    Note over VT,OS: Thread.sleep(1 秒)<br/>虛擬執行緒卸載(unmount)<br/>OS 執行緒立即被其他虛擬執行緒使用
+    OS-->>VT: 睡醒後重新掛載,繼續執行
+    VT-->>Exec: 任務完成
+    deactivate VT
+    Main->>Exec: close()(try-with-resources 自動呼叫)
+    Exec-->>Main: 等待所有任務完成後返回
+    Note over Main: 10,000 個「睡 1 秒」的任務<br/>總耗時約 1 秒(實測 1046 ms)
+```
+
+關鍵在於 `Thread.sleep()` 等阻塞操作**不會佔住 OS 執行緒**:虛擬執行緒阻塞時會從載體執行緒卸載,少量的 OS 執行緒就能承載上萬條虛擬執行緒,所以 10,000 個各睡 1 秒的任務能在約 1 秒內全部完成。
 
 ---
 
